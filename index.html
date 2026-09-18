@@ -21,8 +21,10 @@
     padding: 9px 12px; font-size: 16px; touch-action: manipulation;
   }
   button.active { outline: 3px solid #888; }
-  .color.red.active { background:#ffd9d9; }
-  .color.blue.active { background:#d9e6ff; }
+  .color[data-color="#e60000"] { background:#ffe5e5; border-color:#e60000; }
+  .color[data-color="#0057d9"] { background:#e5edff; border-color:#0057d9; }
+  .color[data-color="#e60000"].active { background:#ffcaca; }
+  .color[data-color="#0057d9"].active { background:#c9dcff; }
   .numbers button { min-width:42px; }
   label { display:flex; align-items:center; gap:8px; font-size:14px; margin:6px 0; }
   input[type=range] { flex:1; min-width:150px; touch-action: manipulation; }
@@ -40,8 +42,20 @@
 <div class="controls">
   <button id="loadBtn">写真を選ぶ</button>
   <input id="fileInput" type="file" accept="image/*" hidden>
+  <button id="saveBtn">保存</button>
+</div>
+
+<label>数字サイズ <input id="numSize" type="range" min="16" max="120" value="48"><span id="numSizeVal">48</span></label>
+<label>線の太さ <input id="lineWidth" type="range" min="1" max="30" value="6"><span id="lineWidthVal">6</span></label>
+
+<div class="controls">
   <button class="color" data-color="#e60000">赤</button>
   <button class="color" data-color="#0057d9">青</button>
+</div>
+
+<div class="controls">
+  <button id="eraserBtn">消しゴム</button>
+  <button id="undoBtn">元に戻す</button>
   <div class="numbers controls" style="margin:0">
     <button class="num" data-num="1">1</button>
     <button class="num" data-num="2">2</button>
@@ -50,15 +64,9 @@
     <button class="num" data-num="5">5</button>
   </div>
 </div>
-
 <div class="controls">
   <button id="lineBtn">直線</button>
-  <button id="undoBtn">元に戻す</button>
-  <button id="saveBtn">保存</button>
 </div>
-
-<label>数字サイズ <input id="numSize" type="range" min="16" max="120" value="48"><span id="numSizeVal">48</span></label>
-<label>線の太さ <input id="lineWidth" type="range" min="1" max="30" value="6"><span id="lineWidthVal">6</span></label>
 
 <div id="hint">色を選んで、数字を押してから写真をタップ。直線は「直線」を押してドラッグしてください。</div>
 <div id="canvasWrap"><canvas id="canvas"></canvas></div>
@@ -70,6 +78,7 @@ const fileInput = document.getElementById('fileInput');
 const loadBtn = document.getElementById('loadBtn');
 const lineBtn = document.getElementById('lineBtn');
 const undoBtn = document.getElementById('undoBtn');
+const eraserBtn = document.getElementById('eraserBtn');
 const saveBtn = document.getElementById('saveBtn');
 const numSize = document.getElementById('numSize');
 const lineWidth = document.getElementById('lineWidth');
@@ -81,6 +90,7 @@ let objects = [];
 let color = '#e60000';
 let selectedNumber = null;
 let lineMode = false;
+let eraserMode = false;
 let drawing = false;
 let start = null;
 let previewEnd = null;
@@ -109,6 +119,8 @@ document.querySelectorAll('.color').forEach(b => {
   b.onclick = () => {
     color = b.dataset.color;
     selectedNumber = null;
+    eraserMode = false;
+    eraserBtn.classList.remove('active');
     document.querySelectorAll('.color').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
   };
@@ -118,6 +130,8 @@ document.querySelectorAll('.num').forEach(b => {
   b.onclick = () => {
     selectedNumber = b.dataset.num;
     lineMode = false;
+    eraserMode = false;
+    eraserBtn.classList.remove('active');
     lineBtn.classList.remove('active');
     document.querySelectorAll('.num').forEach(x => x.classList.remove('active'));
     b.classList.add('active');
@@ -127,7 +141,18 @@ document.querySelectorAll('.num').forEach(b => {
 lineBtn.onclick = () => {
   lineMode = !lineMode;
   selectedNumber = null;
+  eraserMode = false;
+  eraserBtn.classList.remove('active');
   lineBtn.classList.toggle('active', lineMode);
+  document.querySelectorAll('.num').forEach(x => x.classList.remove('active'));
+};
+
+eraserBtn.onclick = () => {
+  eraserMode = !eraserMode;
+  lineMode = false;
+  selectedNumber = null;
+  eraserBtn.classList.toggle('active', eraserMode);
+  lineBtn.classList.remove('active');
   document.querySelectorAll('.num').forEach(x => x.classList.remove('active'));
 };
 
@@ -160,6 +185,11 @@ function begin(e) {
 
   const p = getPoint(e);
 
+  if (eraserMode) {
+    eraseAt(p);
+    return;
+  }
+
   if (lineMode) {
     drawing = true;
     start = p;
@@ -178,13 +208,57 @@ function begin(e) {
 }
 
 function move(e) {
-  if (!drawing) return;
   e.preventDefault();
-  previewEnd = getPoint(e);
+  const p = getPoint(e);
+
+  if (eraserMode) {
+    eraseAt(p);
+    return;
+  }
+
+  if (!drawing) return;
+  previewEnd = p;
   draw();
 }
 
+function eraseAt(p) {
+  // タップ/ドラッグ位置から一定距離以内のマーカーを削除
+  const radius = Math.max(18, Number(lineWidth.value) * 3, Number(numSize.value) * 0.22);
+
+  for (let i = objects.length - 1; i >= 0; i--) {
+    const o = objects[i];
+    let hit = false;
+
+    if (o.type === 'number') {
+      const dx = p.x - o.x;
+      const dy = p.y - o.y;
+      hit = Math.hypot(dx, dy) <= Math.max(radius, o.size * 0.55);
+    } else if (o.type === 'line') {
+      const vx = o.x2 - o.x1;
+      const vy = o.y2 - o.y1;
+      const len2 = vx * vx + vy * vy;
+      let t = len2 ? ((p.x-o.x1)*vx + (p.y-o.y1)*vy) / len2 : 0;
+      t = Math.max(0, Math.min(1, t));
+      const qx = o.x1 + t * vx;
+      const qy = o.y1 + t * vy;
+      hit = Math.hypot(p.x-qx, p.y-qy) <= Math.max(radius, o.width * 2);
+    }
+
+    if (hit) {
+      objects.splice(i, 1);
+      draw();
+      return;
+    }
+  }
+}
+
 function end(e) {
+  if (eraserMode) {
+    drawing = false;
+    start = null;
+    previewEnd = null;
+    return;
+  }
   if (!drawing) return;
   e.preventDefault();
 
@@ -266,9 +340,6 @@ function drawNumber(o) {
   ctx.font = `bold ${o.size}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.lineWidth = Math.max(2, o.size * 0.08);
-  ctx.strokeStyle = '#fff';
-  ctx.strokeText(o.value, o.x, o.y);
   ctx.fillStyle = o.color;
   ctx.fillText(o.value, o.x, o.y);
   ctx.restore();
