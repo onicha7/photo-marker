@@ -2,171 +2,302 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>直線・数字マーカー</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>写真マーカー</title>
 <style>
-*{box-sizing:border-box}
-body{margin:0;background:#111;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif}
-header{padding:14px;text-align:center;font-weight:700;font-size:18px}
-#wrap{padding:0 10px 18px}
-#photoBox{position:relative;width:100%;max-width:900px;margin:auto;background:#222;border-radius:12px;overflow:hidden;min-height:300px;display:flex;align-items:center;justify-content:center}
-#canvas{display:block;width:100%;height:auto;touch-action:none}
-#placeholder{position:absolute;color:#aaa;text-align:center;pointer-events:none}
-.controls{max-width:900px;margin:10px auto 0;background:#202020;border-radius:12px;padding:12px}
-.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0}
-.label{width:78px;color:#bbb;font-size:14px}
-button,input{font:inherit}
-button{border:0;border-radius:9px;background:#3a3a3a;color:white;padding:9px 13px;min-width:42px}
-button.active{outline:3px solid white;background:#555}
-.color{font-size:20px;padding:6px 12px}
-#red.active{outline-color:#ff4b4b}
-#blue.active{outline-color:#4b8cff}
-.slider{flex:1;min-width:150px}
-#save{background:#fff;color:#111;font-weight:700}
-#photo{display:none}
-.small{font-size:12px;color:#999}
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; min-height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    background: #f5f5f5;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+  body { padding: 12px; }
+  h1 { font-size: 20px; margin: 0 0 10px; }
+  .controls { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:10px; }
+  button {
+    border: 1px solid #aaa; border-radius: 8px; background: white;
+    padding: 9px 12px; font-size: 16px; touch-action: manipulation;
+  }
+  button.active { outline: 3px solid #888; }
+  .color.red.active { background:#ffd9d9; }
+  .color.blue.active { background:#d9e6ff; }
+  .numbers button { min-width:42px; }
+  label { display:flex; align-items:center; gap:8px; font-size:14px; margin:6px 0; }
+  input[type=range] { flex:1; min-width:150px; touch-action: manipulation; }
+  #canvasWrap {
+    width:100%; overflow:hidden; background:#ddd; border-radius:8px;
+    touch-action:none;
+  }
+  canvas { display:block; width:100%; height:auto; touch-action:none; }
+  #hint { color:#555; font-size:13px; margin:7px 0; }
 </style>
 </head>
 <body>
-<header>直線・数字マーカー</header>
-<div id="wrap">
-  <div id="photoBox">
-    <canvas id="canvas"></canvas>
-    <div id="placeholder">「写真を選択」から画像を読み込んでください</div>
-  </div>
+<h1>写真マーカー</h1>
 
-  <div class="controls">
-    <div class="row">
-      <button id="choose">📷 写真を選択</button>
-      <input id="photo" type="file" accept="image/*">
-      <button id="undo">↩ Undo</button>
-      <button id="save">保存</button>
-    </div>
-
-    <div class="row">
-      <span class="label">色</span>
-      <button id="red" class="color active">🔴</button>
-      <button id="blue" class="color">🔵</button>
-    </div>
-
-    <div class="row">
-      <span class="label">数字</span>
-      <button class="num active" data-num="1">1</button>
-      <button class="num" data-num="2">2</button>
-      <button class="num" data-num="3">3</button>
-      <button class="num" data-num="4">4</button>
-      <button class="num" data-num="5">5</button>
-      <button id="line">直線</button>
-    </div>
-
-    <div class="row">
-      <span class="label">数字サイズ</span>
-      <input id="numSize" class="slider" type="range" min="20" max="160" value="60">
-      <span id="numSizeValue">60</span>
-    </div>
-
-    <div class="row">
-      <span class="label">線の太さ</span>
-      <input id="lineWidth" class="slider" type="range" min="2" max="40" value="10">
-      <span id="lineWidthValue">10</span>
-    </div>
-    <div class="small">数字モード：写真をタップ。直線モード：押して動かして離す。</div>
+<div class="controls">
+  <button id="loadBtn">写真を選ぶ</button>
+  <input id="fileInput" type="file" accept="image/*" hidden>
+  <button class="color" data-color="#e60000">赤</button>
+  <button class="color" data-color="#0057d9">青</button>
+  <div class="numbers controls" style="margin:0">
+    <button class="num" data-num="1">1</button>
+    <button class="num" data-num="2">2</button>
+    <button class="num" data-num="3">3</button>
+    <button class="num" data-num="4">4</button>
+    <button class="num" data-num="5">5</button>
   </div>
 </div>
 
-<script>
-const canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
-const ph=document.getElementById('placeholder');
-let img=null, objects=[];
-let color='#ff2020', number=1, mode='number', drawing=false, start=null, preview=null;
+<div class="controls">
+  <button id="lineBtn">直線</button>
+  <button id="undoBtn">元に戻す</button>
+  <button id="saveBtn">保存</button>
+</div>
 
-function resizeCanvas(){
-  if(!img)return;
-  const max=1400;
-  const s=Math.min(1,max/img.naturalWidth);
-  canvas.width=Math.round(img.naturalWidth*s);
-  canvas.height=Math.round(img.naturalHeight*s);
+<label>数字サイズ <input id="numSize" type="range" min="16" max="120" value="48"><span id="numSizeVal">48</span></label>
+<label>線の太さ <input id="lineWidth" type="range" min="1" max="30" value="6"><span id="lineWidthVal">6</span></label>
+
+<div id="hint">色を選んで、数字を押してから写真をタップ。直線は「直線」を押してドラッグしてください。</div>
+<div id="canvasWrap"><canvas id="canvas"></canvas></div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const fileInput = document.getElementById('fileInput');
+const loadBtn = document.getElementById('loadBtn');
+const lineBtn = document.getElementById('lineBtn');
+const undoBtn = document.getElementById('undoBtn');
+const saveBtn = document.getElementById('saveBtn');
+const numSize = document.getElementById('numSize');
+const lineWidth = document.getElementById('lineWidth');
+const numSizeVal = document.getElementById('numSizeVal');
+const lineWidthVal = document.getElementById('lineWidthVal');
+
+let image = null;
+let objects = [];
+let color = '#e60000';
+let selectedNumber = null;
+let lineMode = false;
+let drawing = false;
+let start = null;
+let previewEnd = null;
+
+loadBtn.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    image = img;
+    objects = [];
+    // 表示用キャンバスは最大1400pxに縮小（元画像は保持）
+    const max = 1400;
+    const scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    draw();
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+};
+
+document.querySelectorAll('.color').forEach(b => {
+  b.onclick = () => {
+    color = b.dataset.color;
+    selectedNumber = null;
+    document.querySelectorAll('.color').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  };
+});
+
+document.querySelectorAll('.num').forEach(b => {
+  b.onclick = () => {
+    selectedNumber = b.dataset.num;
+    lineMode = false;
+    lineBtn.classList.remove('active');
+    document.querySelectorAll('.num').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  };
+});
+
+lineBtn.onclick = () => {
+  lineMode = !lineMode;
+  selectedNumber = null;
+  lineBtn.classList.toggle('active', lineMode);
+  document.querySelectorAll('.num').forEach(x => x.classList.remove('active'));
+};
+
+undoBtn.onclick = () => {
+  if (objects.length) {
+    objects.pop();
+    draw();
+  }
+};
+
+numSize.oninput = () => {
+  numSizeVal.textContent = numSize.value;
+};
+lineWidth.oninput = () => {
+  lineWidthVal.textContent = lineWidth.value;
+};
+
+function getPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  const p = e.touches?.[0] || e.changedTouches?.[0] || e;
+  return {
+    x: (p.clientX - r.left) * canvas.width / r.width,
+    y: (p.clientY - r.top) * canvas.height / r.height
+  };
+}
+
+function begin(e) {
+  if (!image) return;
+  e.preventDefault();
+
+  const p = getPoint(e);
+
+  if (lineMode) {
+    drawing = true;
+    start = p;
+    previewEnd = p;
+    draw();
+  } else if (selectedNumber) {
+    objects.push({
+      type: 'number',
+      x: p.x, y: p.y,
+      value: selectedNumber,
+      color,
+      size: Number(numSize.value)
+    });
+    draw();
+  }
+}
+
+function move(e) {
+  if (!drawing) return;
+  e.preventDefault();
+  previewEnd = getPoint(e);
   draw();
 }
-function draw(){
-  if(!img)return;
+
+function end(e) {
+  if (!drawing) return;
+  e.preventDefault();
+
+  const p = e.changedTouches?.[0] || e;
+  const r = canvas.getBoundingClientRect();
+  const endPoint = {
+    x: (p.clientX - r.left) * canvas.width / r.width,
+    y: (p.clientY - r.top) * canvas.height / r.height
+  };
+
+  objects.push({
+    type: 'line',
+    x1: start.x, y1: start.y,
+    x2: endPoint.x, y2: endPoint.y,
+    color,
+    width: Number(lineWidth.value)
+  });
+
+  drawing = false;
+  start = null;
+  previewEnd = null;
+  draw();
+}
+
+// Pointer EventsでiPhone/PCの両方に対応。
+// 1回のドラッグごとに1本追加されるので、何本でも描ける。
+canvas.addEventListener('pointerdown', begin);
+canvas.addEventListener('pointermove', move);
+canvas.addEventListener('pointerup', end);
+canvas.addEventListener('pointercancel', end);
+
+// ダブルタップによるSafariの拡大を抑制
+let lastTap = 0;
+canvas.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 350) e.preventDefault();
+  lastTap = now;
+}, {passive:false});
+
+document.addEventListener('dblclick', e => e.preventDefault(), {passive:false});
+
+function draw() {
+  if (!image) {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    return;
+  }
+
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.drawImage(img,0,0,canvas.width,canvas.height);
-  for(const o of objects){
-    if(o.type==='num'){
-      ctx.fillStyle=o.color;
-      ctx.font=`700 ${o.size}px -apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif`;
-      ctx.textAlign='center';ctx.textBaseline='middle';
-      ctx.lineWidth=Math.max(2,o.size/12);
-      ctx.strokeStyle='rgba(0,0,0,.55)';
-      ctx.strokeText(o.text,o.x,o.y);
-      ctx.fillText(o.text,o.x,o.y);
-    }else{
-      ctx.strokeStyle=o.color;ctx.lineWidth=o.width;ctx.lineCap='round';
-      ctx.beginPath();ctx.moveTo(o.x1,o.y1);ctx.lineTo(o.x2,o.y2);ctx.stroke();
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+  for (const o of objects) {
+    if (o.type === 'line') {
+      drawLine(o.x1,o.y1,o.x2,o.y2,o.color,o.width);
+    } else {
+      drawNumber(o);
     }
   }
-  if(drawing&&start&&preview){
-    ctx.strokeStyle=color;ctx.lineWidth=+lineWidth.value;ctx.lineCap='round';
-    ctx.beginPath();ctx.moveTo(start.x,start.y);ctx.lineTo(preview.x,preview.y);ctx.stroke();
-  }
-}
-function pos(e){
-  const r=canvas.getBoundingClientRect();
-  const p=e.touches?e.touches[0]:e;
-  return {x:(p.clientX-r.left)*canvas.width/r.width,y:(p.clientY-r.top)*canvas.height/r.height};
-}
-function pointerDown(e){
-  if(!img)return;
-  e.preventDefault();
-  const p=pos(e);
-  if(mode==='number'){
-    objects.push({type:'num',text:String(number),x:p.x,y:p.y,color,size:+numSize.value});
-    draw();
-  }else{
-    drawing=true;start=p;preview=p;draw();
-  }
-}
-function pointerMove(e){
-  if(!drawing)return;e.preventDefault();preview=pos(e);draw();
-}
-function pointerUp(e){
-  if(!drawing)return;e.preventDefault();
-  const p=pos(e);
-  objects.push({type:'line',x1:start.x,y1:start.y,x2:p.x,y2:p.y,color,width:+lineWidth.value});
-  drawing=false;start=null;preview=null;draw();
-}
-canvas.addEventListener('mousedown',pointerDown);
-canvas.addEventListener('mousemove',pointerMove);
-window.addEventListener('mouseup',pointerUp);
-canvas.addEventListener('touchstart',pointerDown,{passive:false});
-canvas.addEventListener('touchmove',pointerMove,{passive:false});
-window.addEventListener('touchend',pointerUp,{passive:false});
 
-choose.onclick=()=>photo.click();
-photo.onchange=e=>{
-  const f=e.target.files[0];if(!f)return;
-  const u=URL.createObjectURL(f);img=new Image();
-  img.onload=()=>{objects=[];ph.style.display='none';resizeCanvas();URL.revokeObjectURL(u)};
-  img.src=u;
-};
-red.onclick=()=>{color='#ff2020';red.classList.add('active');blue.classList.remove('active')};
-blue.onclick=()=>{color='#2477ff';blue.classList.add('active');red.classList.remove('active')};
-document.querySelectorAll('.num').forEach(b=>b.onclick=()=>{
-  number=+b.dataset.num;
-  document.querySelectorAll('.num').forEach(x=>x.classList.remove('active'));b.classList.add('active');
-  mode='number';line.classList.remove('active');
-});
-line.onclick=()=>{mode=mode==='line'?'number':'line';line.classList.toggle('active')};
-numSize.oninput=()=>{numSizeValue.textContent=numSize.value};
-lineWidth.oninput=()=>{lineWidthValue.textContent=lineWidth.value};
-undo.onclick=()=>{objects.pop();draw()};
-save.onclick=()=>{
-  if(!img)return;
-  const a=document.createElement('a');
-  a.download='marked-photo.png';a.href=canvas.toDataURL('image/png');a.click();
+  if (drawing && start && previewEnd) {
+    drawLine(start.x,start.y,previewEnd.x,previewEnd.y,color,Number(lineWidth.value),true);
+  }
+}
+
+function drawLine(x1,y1,x2,y2,c,w,preview=false) {
+  ctx.save();
+  ctx.strokeStyle = c;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+  if (preview) ctx.globalAlpha = 0.65;
+  ctx.beginPath();
+  ctx.moveTo(x1,y1);
+  ctx.lineTo(x2,y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNumber(o) {
+  ctx.save();
+  ctx.font = `bold ${o.size}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(2, o.size * 0.08);
+  ctx.strokeStyle = '#fff';
+  ctx.strokeText(o.value, o.x, o.y);
+  ctx.fillStyle = o.color;
+  ctx.fillText(o.value, o.x, o.y);
+  ctx.restore();
+}
+
+saveBtn.onclick = async () => {
+  if (!image) return;
+
+  canvas.toBlob(async blob => {
+    if (!blob) return;
+    const file = new File([blob], 'photo-marker.png', {type:'image/png'});
+
+    // iPhoneでは共有シートから「画像を保存」が使いやすい
+    if (navigator.canShare && navigator.canShare({files:[file]})) {
+      try {
+        await navigator.share({files:[file], title:'写真マーカー'});
+        return;
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'photo-marker.png';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }, 'image/png');
 };
 </script>
 </body>
 </html>
-<!-- GitHub Pages test -->
